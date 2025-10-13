@@ -152,6 +152,14 @@ int32_t staticQueuePeak(staticQueue_t* queue, staticQueueItem_t** peak_item);
 int32_t staticQueueClear(staticQueue_t* queue);
 
 /**
+ * Erase a specific item from the queue
+ * Input: Queue instance
+ * Input: Pointer to the item to erase
+ * Returns: queueErr_t
+ */
+int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item);
+
+/**
  * Check it the queue is full
  * Input: Queue instance
  * Returns: true if full

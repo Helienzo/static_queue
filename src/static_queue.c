@@ -123,3 +123,62 @@ int32_t staticQueueClear(staticQueue_t* queue)
     queue->tail = queue->first_item;
     return STATIC_QUEUE_SUCCESS;
 }
+
+int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
+{
+    // Check if the item is active
+    if (!item->active) {
+        return STATIC_QUEUE_EMPTY;
+    }
+
+    // Mark the item as inactive
+    item->active = false;
+
+    // Special case: if this was the only item in the queue
+    if (queue->tail == queue->head->last) {
+        // Queue is now empty, reset pointers
+        queue->head = queue->first_item;
+        queue->tail = queue->first_item;
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // If erasing the tail item (oldest item), just move tail to next
+    if (item == queue->tail) {
+        queue->tail = queue->tail->next;
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // If erasing the item just before head (newest item), move head backward
+    if (item->next == queue->head) {
+        queue->head = item;
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // For items in the middle: remove from current position and relink at head
+    // This keeps the item reachable in the circular buffer for future reuse.
+
+    // Step 1: Remove item from its current position in the list
+    staticQueueItem_t* prev_item = item->last;
+    staticQueueItem_t* next_item = item->next;
+
+    prev_item->next = next_item;
+    next_item->last = prev_item;
+
+    // Step 2: Reinsert the item just before head and move head to point at it
+    // This keeps the item in the circular structure (reachable) and maintains
+    // the invariant that head points to an inactive slot ready for put().
+
+    staticQueueItem_t* before_head = queue->head->last;
+
+    // Insert: before_head <-> item <-> head
+    before_head->next = item;
+    item->last = before_head;
+    item->next = queue->head;
+    queue->head->last = item;
+
+    // Move head back to point at the newly inserted (inactive) item
+    // This way head always points at an inactive slot, ready for put()
+    queue->head = item;
+
+    return STATIC_QUEUE_SUCCESS;
+}
