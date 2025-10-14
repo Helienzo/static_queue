@@ -123,3 +123,78 @@ int32_t staticQueueClear(staticQueue_t* queue)
     queue->tail = queue->first_item;
     return STATIC_QUEUE_SUCCESS;
 }
+
+int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
+{
+    // Check if the item is active
+    if (!item->active) {
+        return STATIC_QUEUE_EMPTY;
+    }
+
+    // Mark the item as inactive
+    item->active = false;
+
+    // Special case: if this was the only item in the queue
+    if (queue->tail == queue->head->last) {
+        // Queue is now empty, reset pointers
+        queue->head = queue->first_item;
+        queue->tail = queue->first_item;
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // If erasing the tail item (oldest item), just move tail to next
+    if (item == queue->tail) {
+        queue->tail = queue->tail->next;
+
+        // Skip over any remaining inactive items at tail
+        while (queue->tail != queue->head && !queue->tail->active) {
+            queue->tail = queue->tail->next;
+        }
+
+        // Check if tail caught up to head with exactly one active item
+        if (queue->tail == queue->head && queue->tail->active) {
+            // Move head forward to maintain tail != head invariant for single item
+            queue->head = queue->head->next;
+        }
+
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // If erasing the item just before head (newest item), move head backward
+    if (item->next == queue->head) {
+        queue->head = item;
+
+        // Check if head caught up to tail with exactly one active item
+        if (queue->tail == queue->head && queue->tail->active) {
+            // Move head forward to maintain tail != head invariant for single item
+            queue->head = queue->head->next;
+        }
+
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // For items in the middle: remove from current position and relink immediately before tail
+
+    // Step 1: Remove item from its current position in the list
+    staticQueueItem_t* prev_item = item->last;
+    staticQueueItem_t* next_item = item->next;
+
+    prev_item->next = next_item;
+    next_item->last = prev_item;
+
+    // Step 2: Reinsert the item immediately before tail
+    staticQueueItem_t* before_tail = queue->tail->last;
+
+    // Insert: before_tail <-> item <-> tail
+    before_tail->next = item;
+    item->last = before_tail;
+    item->next = queue->tail;
+    queue->tail->last = item;
+
+    // Step 3: If queue was full, move head to point to the erased item (now inactive)
+    if (queue->head == queue->tail && queue->head->active) {
+        queue->head = item;
+    }
+
+    return STATIC_QUEUE_SUCCESS;
+}
