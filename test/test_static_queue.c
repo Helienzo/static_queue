@@ -686,6 +686,556 @@ int main() {
 
     printf("\n=== All staticQueueErase tests passed ===\n");
 
+    // Test 9: Multiple consecutive middle erases
+    printf("\nTest 9: Multiple consecutive middle item erases\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* items_9[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_9[i]);
+        myList_t* list_item = CONTAINER_OF(items_9[i], myList_t, node);
+        list_item->number = (i + 1) * 100;  // 100, 200, 300, 400
+    }
+
+    // Erase items 1 and 2 (200 and 300) - both middle items
+    result = staticQueueErase(&queue, items_9[1]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase first middle item\n");
+        return 1;
+    }
+
+    result = staticQueueErase(&queue, items_9[2]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase second middle item\n");
+        return 1;
+    }
+
+    // Should pop 100 then 400
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 100) {
+        printf("Expected 100, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 400) {
+        printf("Expected 400, got %u\n", data);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+    printf("Test 9 passed: Multiple middle erases handled correctly\n");
+
+    // Test 10: Erase from full queue, then refill
+    printf("\nTest 10: Erase from full queue and refill\n");
+    queueClear(&queue);
+
+    // Fill queue completely
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = queuePut(&queue, (i + 1) * 10);
+        if (result != STATIC_QUEUE_SUCCESS) {
+            printf("Failed to fill queue\n");
+            return 1;
+        }
+    }
+
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full\n");
+        return 1;
+    }
+
+    // Get reference to second item and erase it
+    staticQueueItem_t* second_item = queue.tail->next;
+    result = staticQueueErase(&queue, second_item);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase from full queue\n");
+        return 1;
+    }
+
+    // Queue should no longer be full
+    if (staticQueuefull(&queue)) {
+        printf("Queue should not be full after erase\n");
+        return 1;
+    }
+
+    // Should be able to add one more item
+    result = queuePut(&queue, 999);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Should be able to add item after erase\n");
+        return 1;
+    }
+
+    printf("Test 10 passed: Can refill queue after erase from full\n");
+
+    // Test 11: Wrap-around with erase
+    printf("\nTest 11: Circular buffer wrap-around with erase\n");
+    queueClear(&queue);
+
+    // Fill queue
+    queuePut(&queue, 1);
+    queuePut(&queue, 2);
+    queuePut(&queue, 3);
+    queuePut(&queue, 4);
+
+    // Pop two items (wrap tail forward)
+    queuePop(&queue, &data);
+    queuePop(&queue, &data);
+
+    // Add two more items (wrap head forward)
+    queuePut(&queue, 5);
+    queuePut(&queue, 6);
+
+    // Now queue has: 3, 4, 5, 6 (but circular buffer is wrapped)
+    // Erase item 4
+    staticQueueItem_t* item_to_erase_11 = queue.tail->next;
+    result = staticQueueErase(&queue, item_to_erase_11);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase in wrapped state\n");
+        return 1;
+    }
+
+    // Pop remaining items in order: 3, 5, 6
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 3) {
+        printf("Expected 3, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 5) {
+        printf("Expected 5, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 6) {
+        printf("Expected 6, got %u\n", data);
+        return 1;
+    }
+
+    printf("Test 11 passed: Wrap-around with erase works correctly\n");
+
+    // Test 12: Peak after multiple erases
+    printf("\nTest 12: Peak after multiple erases\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* items_12[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_12[i]);
+        myList_t* list_item = CONTAINER_OF(items_12[i], myList_t, node);
+        list_item->number = (i + 1) * 10;  // 10, 20, 30, 40
+    }
+
+    // Peak should return 10
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 10) {
+        printf("Peak should return 10, got %u\n", data);
+        return 1;
+    }
+
+    // Erase first item (10)
+    result = staticQueueErase(&queue, items_12[0]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase first item\n");
+        return 1;
+    }
+
+    // Peak should now return 20
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 20) {
+        printf("Peak should return 20 after erase, got %u\n", data);
+        return 1;
+    }
+
+    // Erase second item (20)
+    result = staticQueueErase(&queue, items_12[1]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase second item\n");
+        return 1;
+    }
+
+    // Peak should now return 30
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 30) {
+        printf("Peak should return 30 after second erase, got %u\n", data);
+        return 1;
+    }
+
+    printf("Test 12 passed: Peak always returns active item after erases\n");
+
+    // Test 13: Erase same item twice
+    printf("\nTest 13: Erase same item twice (should fail)\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* dup_item;
+    result = staticQueuePut(&queue, &dup_item);
+    myList_t* dup_list = CONTAINER_OF(dup_item, myList_t, node);
+    dup_list->number = 777;
+
+    result = staticQueueErase(&queue, dup_item);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("First erase should succeed\n");
+        return 1;
+    }
+
+    // Try to erase again - should fail
+    result = staticQueueErase(&queue, dup_item);
+    if (result != STATIC_QUEUE_EMPTY) {
+        printf("Second erase should fail with STATIC_QUEUE_EMPTY, got %i\n", result);
+        return 1;
+    }
+
+    printf("Test 13 passed: Cannot erase same item twice\n");
+
+    // Test 14: Erase all but one item, then operate
+    printf("\nTest 14: Erase all but one, then operations\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* items_14[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_14[i]);
+        myList_t* list_item = CONTAINER_OF(items_14[i], myList_t, node);
+        list_item->number = (i + 1) * 111;  // 111, 222, 333, 444
+    }
+
+    // Erase first 3 items
+    for (int i = 0; i < 3; i++) {
+        result = staticQueueErase(&queue, items_14[i]);
+        if (result != STATIC_QUEUE_SUCCESS) {
+            printf("Failed to erase item %i\n", i);
+            return 1;
+        }
+    }
+
+    // Queue should not be empty (one item left)
+    if (staticQueueEmpty(&queue)) {
+        printf("Queue should not be empty (one item left)\n");
+        return 1;
+    }
+
+    // Peak should return last item
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 444) {
+        printf("Peak should return 444, got %u\n", data);
+        return 1;
+    }
+
+    // Pop should return last item
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 444) {
+        printf("Pop should return 444, got %u\n", data);
+        return 1;
+    }
+
+    // Now queue should be empty
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty after popping last item\n");
+        return 1;
+    }
+
+    // Should be able to add items again
+    result = queuePut(&queue, 888);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Should be able to add after clearing\n");
+        return 1;
+    }
+
+    printf("Test 14 passed: Single item operations after multiple erases\n");
+
+    // Test 15: Alternating erase and pop operations
+    printf("\nTest 15: Alternating erase and pop\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* items_15[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_15[i]);
+        myList_t* list_item = CONTAINER_OF(items_15[i], myList_t, node);
+        list_item->number = (i + 1) * 5;  // 5, 10, 15, 20
+    }
+
+    // Pop first item (5)
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 5) {
+        printf("Expected 5, got %u\n", data);
+        return 1;
+    }
+
+    // Erase third item (15)
+    result = staticQueueErase(&queue, items_15[2]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase item\n");
+        return 1;
+    }
+
+    // Pop second item (10)
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 10) {
+        printf("Expected 10, got %u\n", data);
+        return 1;
+    }
+
+    // Erase last item (20)
+    result = staticQueueErase(&queue, items_15[3]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase last item\n");
+        return 1;
+    }
+
+    // Queue should be empty
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+
+    printf("Test 15 passed: Alternating erase and pop works correctly\n");
+
+    // Test 16: Erase after PutFirst
+    printf("\nTest 16: Erase after PutFirst operations\n");
+    queueClear(&queue);
+
+    result = queuePut(&queue, 100);
+    result = queuePutFirst(&queue, 50);  // Should be at tail now
+    result = queuePut(&queue, 150);
+
+    // Queue order: 50 (tail), 100, 150 (before head)
+    // Peak should return 50
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 50) {
+        printf("Peak should return 50, got %u\n", data);
+        return 1;
+    }
+
+    // Erase the tail item (50)
+    staticQueueItem_t* putfirst_item = queue.tail;
+    result = staticQueueErase(&queue, putfirst_item);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase PutFirst item\n");
+        return 1;
+    }
+
+    // Should now pop 100, 150
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 100) {
+        printf("Expected 100, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 150) {
+        printf("Expected 150, got %u\n", data);
+        return 1;
+    }
+
+    printf("Test 16 passed: Erase works correctly with PutFirst\n");
+
+    // Test 17: Erase tail item when queue is full
+    printf("\nTest 17: Erase tail item from full queue\n");
+    queueClear(&queue);
+
+    // Fill queue completely
+    staticQueueItem_t* items_17[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_17[i]);
+        myList_t* list_item = CONTAINER_OF(items_17[i], myList_t, node);
+        list_item->number = (i + 1) * 10;  // 10, 20, 30, 40
+    }
+
+    // Verify queue is full
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full before erase\n");
+        return 1;
+    }
+
+    // Erase tail item (10)
+    result = staticQueueErase(&queue, items_17[0]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase tail from full queue\n");
+        return 1;
+    }
+
+    // Queue should no longer be full
+    if (staticQueuefull(&queue)) {
+        printf("Queue should not be full after erasing tail\n");
+        return 1;
+    }
+
+    // Should be able to add another item
+    result = queuePut(&queue, 999);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Should be able to add item after erase\n");
+        return 1;
+    }
+
+    // Pop should return 20, 30, 40, 999
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 20) {
+        printf("Expected 20, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 30) {
+        printf("Expected 30, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 40) {
+        printf("Expected 40, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 999) {
+        printf("Expected 999, got %u\n", data);
+        return 1;
+    }
+
+    printf("Test 17 passed: Erase tail from full queue works correctly\n");
+
+    // Test 18: Erase head-1 item (newest) when queue is full
+    printf("\nTest 18: Erase newest item from full queue\n");
+    queueClear(&queue);
+
+    // Fill queue completely
+    staticQueueItem_t* items_18[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_18[i]);
+        myList_t* list_item = CONTAINER_OF(items_18[i], myList_t, node);
+        list_item->number = (i + 1) * 100;  // 100, 200, 300, 400
+    }
+
+    // Verify queue is full
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full before erase\n");
+        return 1;
+    }
+
+    // Erase newest item (400 - the one before head)
+    result = staticQueueErase(&queue, items_18[3]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase newest item from full queue\n");
+        return 1;
+    }
+
+    // Queue should no longer be full
+    if (staticQueuefull(&queue)) {
+        printf("Queue should not be full after erasing newest\n");
+        return 1;
+    }
+
+    // Should be able to add another item
+    result = queuePut(&queue, 777);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Should be able to add item after erase\n");
+        return 1;
+    }
+
+    // Pop should return 100, 200, 300, 777 (not 400)
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 100) {
+        printf("Expected 100, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 200) {
+        printf("Expected 200, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 300) {
+        printf("Expected 300, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 777) {
+        printf("Expected 777, got %u\n", data);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+
+    printf("Test 18 passed: Erase newest from full queue works correctly\n");
+
+    // Test 19: Erase multiple items from full queue
+    printf("\nTest 19: Erase multiple items from full queue\n");
+    queueClear(&queue);
+
+    // Fill queue completely
+    staticQueueItem_t* items_19[LIST_LEN];
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = staticQueuePut(&queue, &items_19[i]);
+        myList_t* list_item = CONTAINER_OF(items_19[i], myList_t, node);
+        list_item->number = (i + 1) * 50;  // 50, 100, 150, 200
+    }
+
+    // Verify queue is full
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full before erase\n");
+        return 1;
+    }
+
+    // Erase tail (50)
+    result = staticQueueErase(&queue, items_19[0]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase first item\n");
+        return 1;
+    }
+
+    // Erase newest (200)
+    result = staticQueueErase(&queue, items_19[3]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase newest item\n");
+        return 1;
+    }
+
+    // Erase middle (150)
+    result = staticQueueErase(&queue, items_19[2]);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase middle item\n");
+        return 1;
+    }
+
+    // Only item 100 should remain
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 100) {
+        printf("Expected 100, got %u\n", data);
+        return 1;
+    }
+
+    // Queue should be empty
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty after popping last item\n");
+        return 1;
+    }
+
+    // Should be able to fill queue again
+    for (int i = 0; i < LIST_LEN; i++) {
+        result = queuePut(&queue, i * 7);
+        if (result != STATIC_QUEUE_SUCCESS) {
+            printf("Failed to refill queue at position %d\n", i);
+            return 1;
+        }
+    }
+
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full after refilling\n");
+        return 1;
+    }
+
+    printf("Test 19 passed: Multiple erases from full queue work correctly\n");
+
+    printf("\n=== All extended tests passed ===\n");
+
     // Connect first driver and app
     printf("\nTest Done\n");
 }

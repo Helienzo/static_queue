@@ -94,23 +94,6 @@ int32_t staticQueuePop(staticQueue_t* queue, staticQueueItem_t** pop_item)
         return STATIC_QUEUE_EMPTY;
     }
 
-    // Skip over any inactive items at tail (from previous erase operations)
-    while (queue->tail != queue->head && !queue->tail->active) {
-        queue->tail = queue->tail->next;
-    }
-
-    // If tail caught up to head with exactly one active item, move head forward
-    if (queue->tail == queue->head && queue->tail->active) {
-        queue->head = queue->head->next;
-    }
-
-    // Check again if empty after skipping
-    if (staticQueueEmpty(queue)) {
-        queue->head = queue->first_item;
-        queue->tail = queue->first_item;
-        return STATIC_QUEUE_EMPTY;
-    }
-
     *pop_item           = queue->tail;
     queue->tail->active = false;
     queue->tail         = queue->tail->next;
@@ -123,20 +106,7 @@ int32_t staticQueuePeak(staticQueue_t* queue, staticQueueItem_t** peak_item) {
         return STATIC_QUEUE_EMPTY;
     }
 
-    // Skip over any inactive items at tail (from previous erase operations)
-    staticQueueItem_t* temp_tail = queue->tail;
-    while (temp_tail != queue->head && !temp_tail->active) {
-        temp_tail = temp_tail->next;
-    }
-
-    // Check if we reached head without finding an active item
-    if (temp_tail == queue->head && !temp_tail->active) {
-        queue->head = queue->first_item;
-        queue->tail = queue->first_item;
-        return STATIC_QUEUE_EMPTY;
-    }
-
-    *peak_item = temp_tail;
+    *peak_item = queue->tail;
 
     return STATIC_QUEUE_SUCCESS;
 }
@@ -173,9 +143,13 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
     }
 
     // If erasing the tail item (oldest item), just move tail to next
-    // Pop/peak will skip over inactive items
     if (item == queue->tail) {
         queue->tail = queue->tail->next;
+
+        // Skip over any remaining inactive items at tail
+        while (queue->tail != queue->head && !queue->tail->active) {
+            queue->tail = queue->tail->next;
+        }
 
         // Check if tail caught up to head with exactly one active item
         if (queue->tail == queue->head && queue->tail->active) {
@@ -199,8 +173,7 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
         return STATIC_QUEUE_SUCCESS;
     }
 
-    // For items in the middle: remove from current position and relink immediately after tail
-    // This ensures tail never points to an inactive item.
+    // For items in the middle: remove from current position and relink immediately before tail
 
     // Step 1: Remove item from its current position in the list
     staticQueueItem_t* prev_item = item->last;
@@ -209,18 +182,19 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
     prev_item->next = next_item;
     next_item->last = prev_item;
 
-    // Step 2: Reinsert the item immediately after tail (but before the next active item)
-    // This keeps it in the circular structure but ensures tail always points to an active item.
-    staticQueueItem_t* after_tail = queue->tail->next;
+    // Step 2: Reinsert the item immediately before tail
+    staticQueueItem_t* before_tail = queue->tail->last;
 
-    // Insert: tail <-> item <-> after_tail
-    queue->tail->next = item;
-    item->last = queue->tail;
-    item->next = after_tail;
-    after_tail->last = item;
+    // Insert: before_tail <-> item <-> tail
+    before_tail->next = item;
+    item->last = before_tail;
+    item->next = queue->tail;
+    queue->tail->last = item;
 
-    // Don't move tail or head - the inactive item sits right after tail,
-    // and will be naturally encountered when tail advances during pop.
+    // Step 3: If queue was full, move head to point to the erased item (now inactive)
+    if (queue->head == queue->tail && queue->head->active) {
+        queue->head = item;
+    }
 
     return STATIC_QUEUE_SUCCESS;
 }
