@@ -626,6 +626,64 @@ int main() {
 
     printf("Test 7 passed: Full capacity maintained, correct order preserved\n");
 
+    // Test 8: Verify tail never points to inactive item
+    printf("\nTest 8: Tail advancement after erasing middle then tail\n");
+    queueClear(&queue);
+
+    staticQueueItem_t* item_a;
+    staticQueueItem_t* item_b;
+    staticQueueItem_t* item_c;
+
+    // Add three items
+    result = staticQueuePut(&queue, &item_a);
+    myList_t* list_a = CONTAINER_OF(item_a, myList_t, node);
+    list_a->number = 100;
+
+    result = staticQueuePut(&queue, &item_b);
+    myList_t* list_b = CONTAINER_OF(item_b, myList_t, node);
+    list_b->number = 200;
+
+    result = staticQueuePut(&queue, &item_c);
+    myList_t* list_c = CONTAINER_OF(item_c, myList_t, node);
+    list_c->number = 300;
+
+    // Erase middle item (B)
+    result = staticQueueErase(&queue, item_b);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("Failed to erase middle item\n");
+        return 1;
+    }
+
+    // Now: A(tail, active) -> B(inactive) -> C(active)
+    // Pop A - tail should skip over B and point to C
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 100) {
+        printf("Failed to pop A correctly\n");
+        return 1;
+    }
+
+    // Peak should return C (not the inactive B)
+    result = queuePeak(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 300) {
+        printf("Peak should return C (300), got %u\n", data);
+        return 1;
+    }
+
+    // Pop C
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 300) {
+        printf("Failed to pop C correctly\n");
+        return 1;
+    }
+
+    // Queue should now be empty
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+
+    printf("Test 8 passed: Tail correctly skips inactive items\n");
+
     printf("\n=== All staticQueueErase tests passed ===\n");
 
     // Connect first driver and app

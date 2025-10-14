@@ -94,6 +94,23 @@ int32_t staticQueuePop(staticQueue_t* queue, staticQueueItem_t** pop_item)
         return STATIC_QUEUE_EMPTY;
     }
 
+    // Skip over any inactive items at tail (from previous erase operations)
+    while (queue->tail != queue->head && !queue->tail->active) {
+        queue->tail = queue->tail->next;
+    }
+
+    // If tail caught up to head with exactly one active item, move head forward
+    if (queue->tail == queue->head && queue->tail->active) {
+        queue->head = queue->head->next;
+    }
+
+    // Check again if empty after skipping
+    if (staticQueueEmpty(queue)) {
+        queue->head = queue->first_item;
+        queue->tail = queue->first_item;
+        return STATIC_QUEUE_EMPTY;
+    }
+
     *pop_item           = queue->tail;
     queue->tail->active = false;
     queue->tail         = queue->tail->next;
@@ -106,7 +123,20 @@ int32_t staticQueuePeak(staticQueue_t* queue, staticQueueItem_t** peak_item) {
         return STATIC_QUEUE_EMPTY;
     }
 
-    *peak_item = queue->tail;
+    // Skip over any inactive items at tail (from previous erase operations)
+    staticQueueItem_t* temp_tail = queue->tail;
+    while (temp_tail != queue->head && !temp_tail->active) {
+        temp_tail = temp_tail->next;
+    }
+
+    // Check if we reached head without finding an active item
+    if (temp_tail == queue->head && !temp_tail->active) {
+        queue->head = queue->first_item;
+        queue->tail = queue->first_item;
+        return STATIC_QUEUE_EMPTY;
+    }
+
+    *peak_item = temp_tail;
 
     return STATIC_QUEUE_SUCCESS;
 }
@@ -143,19 +173,34 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
     }
 
     // If erasing the tail item (oldest item), just move tail to next
+    // Pop/peak will skip over inactive items
     if (item == queue->tail) {
         queue->tail = queue->tail->next;
+
+        // Check if tail caught up to head with exactly one active item
+        if (queue->tail == queue->head && queue->tail->active) {
+            // Move head forward to maintain tail != head invariant for single item
+            queue->head = queue->head->next;
+        }
+
         return STATIC_QUEUE_SUCCESS;
     }
 
     // If erasing the item just before head (newest item), move head backward
     if (item->next == queue->head) {
         queue->head = item;
+
+        // Check if head caught up to tail with exactly one active item
+        if (queue->tail == queue->head && queue->tail->active) {
+            // Move head forward to maintain tail != head invariant for single item
+            queue->head = queue->head->next;
+        }
+
         return STATIC_QUEUE_SUCCESS;
     }
 
-    // For items in the middle: remove from current position and relink at head
-    // This keeps the item reachable in the circular buffer for future reuse.
+    // For items in the middle: remove from current position and relink immediately after tail
+    // This ensures tail never points to an inactive item.
 
     // Step 1: Remove item from its current position in the list
     staticQueueItem_t* prev_item = item->last;
@@ -164,21 +209,18 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
     prev_item->next = next_item;
     next_item->last = prev_item;
 
-    // Step 2: Reinsert the item just before head and move head to point at it
-    // This keeps the item in the circular structure (reachable) and maintains
-    // the invariant that head points to an inactive slot ready for put().
+    // Step 2: Reinsert the item immediately after tail (but before the next active item)
+    // This keeps it in the circular structure but ensures tail always points to an active item.
+    staticQueueItem_t* after_tail = queue->tail->next;
 
-    staticQueueItem_t* before_head = queue->head->last;
+    // Insert: tail <-> item <-> after_tail
+    queue->tail->next = item;
+    item->last = queue->tail;
+    item->next = after_tail;
+    after_tail->last = item;
 
-    // Insert: before_head <-> item <-> head
-    before_head->next = item;
-    item->last = before_head;
-    item->next = queue->head;
-    queue->head->last = item;
-
-    // Move head back to point at the newly inserted (inactive) item
-    // This way head always points at an inactive slot, ready for put()
-    queue->head = item;
+    // Don't move tail or head - the inactive item sits right after tail,
+    // and will be naturally encountered when tail advances during pop.
 
     return STATIC_QUEUE_SUCCESS;
 }
