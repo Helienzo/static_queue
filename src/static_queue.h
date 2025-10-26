@@ -79,9 +79,10 @@
 
 // Package queue
 typedef enum {
-    STATIC_QUEUE_SUCCESS = 0,
-    STATIC_QUEUE_FULL    = -401,
-    STATIC_QUEUE_EMPTY   = -402,
+    STATIC_QUEUE_SUCCESS      = 0,
+    STATIC_QUEUE_FULL         = -401,
+    STATIC_QUEUE_EMPTY        = -402,
+    STATIC_QUEUE_NOT_IN_QUEUE = -403,
 } queueErr_t;
 
 typedef struct staticQueueItem staticQueueItem_t;
