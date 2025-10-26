@@ -211,3 +211,87 @@ int32_t staticQueueErase(staticQueue_t* queue, staticQueueItem_t* item)
 
     return STATIC_QUEUE_SUCCESS;
 }
+
+int32_t staticQueueGetNumItems(staticQueue_t* queue)
+{
+    if (queue == NULL) {
+        return STATIC_QUEUE_EMPTY;
+    }
+
+    if (staticQueueEmpty(queue)) {
+        return 0;
+    }
+
+    // Check if queue is full
+    if (staticQueuefull(queue)) {
+        return queue->queue_length;
+    }
+
+    // Count active items from tail to head
+    int32_t count = 0;
+    staticQueueItem_t *current = queue->tail;
+
+    while (current != queue->head) {
+        if (current->active) {
+            count++;
+        }
+        current = current->next;
+    }
+
+    return count;
+}
+
+int32_t staticQueueForEach(staticQueue_t* queue, int32_t (*callback)(staticQueue_t *queue, staticQueueItem_t *item))
+{
+    if (queue == NULL || callback == NULL) {
+        return STATIC_QUEUE_EMPTY;
+    }
+
+    if (staticQueueEmpty(queue)) {
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    // Get the number of items to process
+    int32_t num_items = staticQueueGetNumItems(queue);
+    if (num_items <= 0) {
+        return STATIC_QUEUE_SUCCESS;
+    }
+
+    staticQueueItem_t *current = queue->tail;
+    int32_t processed = 0;
+
+    // Process exactly num_items active items
+    while (processed < num_items) {
+        // Only process active items
+        if (current->active) {
+            int32_t cb_res = callback(queue, current);
+            switch(cb_res) {
+                case STATIC_QUEUE_CB_NEXT:
+                    current = current->next;
+                    processed++;
+                    break;
+                case STATIC_QUEUE_CB_STOP:
+                    return STATIC_QUEUE_SUCCESS;
+                case STATIC_QUEUE_CB_ERASE: {
+                    staticQueueItem_t *tmp = current;
+                    current = current->next;
+                    processed++;
+                    // Erase this item from the queue
+                    if ((cb_res = staticQueueErase(queue, tmp)) != STATIC_QUEUE_SUCCESS) {
+                        return cb_res;
+                    }
+                    // Check if queue is now empty after erase
+                    if (staticQueueEmpty(queue)) {
+                        return STATIC_QUEUE_SUCCESS;
+                    }
+                } break;
+                default:
+                    return cb_res;
+            }
+        } else {
+            current = current->next;
+        }
+    }
+
+    return STATIC_QUEUE_SUCCESS;
+}

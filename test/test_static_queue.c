@@ -82,6 +82,72 @@ static int32_t queueClear(staticQueue_t* queue)
 #define THIRD_DATA  1337
 #define FOURTH_DATA 59
 
+// Global counters for ForEach callbacks
+static int32_t g_foreach_counter = 0;
+static int32_t g_foreach_sum = 0;
+
+// ForEach callback functions
+static int32_t countCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    myList_t* list_item = CONTAINER_OF(item, myList_t, node);
+    g_foreach_counter++;
+    g_foreach_sum += list_item->number;
+    return STATIC_QUEUE_CB_NEXT;
+}
+
+static int32_t stopCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    (void)item;  // Unused
+    g_foreach_counter++;
+    if (g_foreach_counter >= 2) {
+        return STATIC_QUEUE_CB_STOP;
+    }
+    return STATIC_QUEUE_CB_NEXT;
+}
+
+static int32_t eraseCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    myList_t* list_item = CONTAINER_OF(item, myList_t, node);
+    if (list_item->number > 25) {
+        return STATIC_QUEUE_CB_ERASE;
+    }
+    return STATIC_QUEUE_CB_NEXT;
+}
+
+static int32_t eraseAllCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    (void)item;  // Unused
+    return STATIC_QUEUE_CB_ERASE;
+}
+
+static int32_t eraseEvenCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    myList_t* list_item = CONTAINER_OF(item, myList_t, node);
+    if (list_item->number % 2 == 0) {
+        return STATIC_QUEUE_CB_ERASE;
+    }
+    return STATIC_QUEUE_CB_NEXT;
+}
+
+static int32_t errorCallback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    (void)item;  // Unused
+    g_foreach_counter++;
+    if (g_foreach_counter == 3) {
+        return -999;  // Custom error
+    }
+    return STATIC_QUEUE_CB_NEXT;
+}
+
+static int32_t eraseOnly20Callback(staticQueue_t *q, staticQueueItem_t *item) {
+    (void)q;  // Unused
+    myList_t* list_item = CONTAINER_OF(item, myList_t, node);
+    if (list_item->number == 20) {
+        return STATIC_QUEUE_CB_ERASE;
+    }
+    return STATIC_QUEUE_CB_NEXT;
+}
+
 int main() {
 
     staticQueue_t queue;
@@ -1235,6 +1301,400 @@ int main() {
     printf("Test 19 passed: Multiple erases from full queue work correctly\n");
 
     printf("\n=== All extended tests passed ===\n");
+
+    // ===== Test staticQueueGetNumItems function =====
+    printf("\n=== Testing staticQueueGetNumItems ===\n");
+
+    // Test: Empty queue
+    printf("\nTest: GetNumItems on empty queue\n");
+    queueClear(&queue);
+    int32_t num = staticQueueGetNumItems(&queue);
+    if (num != 0) {
+        printf("Expected 0 items in empty queue, got %i\n", num);
+        return 1;
+    }
+    printf("Passed: Empty queue has 0 items\n");
+
+    // Test: Single item
+    printf("\nTest: GetNumItems with single item\n");
+    queuePut(&queue, 10);
+    num = staticQueueGetNumItems(&queue);
+    if (num != 1) {
+        printf("Expected 1 item, got %i\n", num);
+        return 1;
+    }
+    printf("Passed: Single item counted correctly\n");
+
+    // Test: Multiple items (not full)
+    printf("\nTest: GetNumItems with multiple items\n");
+    queueClear(&queue);
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    num = staticQueueGetNumItems(&queue);
+    if (num != 3) {
+        printf("Expected 3 items, got %i\n", num);
+        return 1;
+    }
+    printf("Passed: Multiple items counted correctly\n");
+
+    // Test: Full queue
+    printf("\nTest: GetNumItems on full queue\n");
+    queueClear(&queue);
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+    if (!staticQueuefull(&queue)) {
+        printf("Queue should be full\n");
+        return 1;
+    }
+    num = staticQueueGetNumItems(&queue);
+    if (num != LIST_LEN) {
+        printf("Expected %i items in full queue, got %i\n", LIST_LEN, num);
+        return 1;
+    }
+    printf("Passed: Full queue counted correctly (%i items)\n", LIST_LEN);
+
+    // Test: After pop
+    printf("\nTest: GetNumItems after pop\n");
+    queueClear(&queue);
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePop(&queue, &data);
+    num = staticQueueGetNumItems(&queue);
+    if (num != 2) {
+        printf("Expected 2 items after pop, got %i\n", num);
+        return 1;
+    }
+    printf("Passed: Count correct after pop\n");
+
+    // Test: After erase
+    printf("\nTest: GetNumItems after erase\n");
+    queueClear(&queue);
+    staticQueueItem_t* erase_items[3];
+    staticQueuePut(&queue, &erase_items[0]);
+    staticQueuePut(&queue, &erase_items[1]);
+    staticQueuePut(&queue, &erase_items[2]);
+
+    staticQueueErase(&queue, erase_items[1]);  // Erase middle item
+    num = staticQueueGetNumItems(&queue);
+    if (num != 2) {
+        printf("Expected 2 items after erase, got %i\n", num);
+        return 1;
+    }
+    printf("Passed: Count correct after erase\n");
+
+    printf("\n=== All staticQueueGetNumItems tests passed ===\n");
+
+    // ===== Test staticQueueForEach function =====
+    printf("\n=== Testing staticQueueForEach ===\n");
+
+    // Test 20: Basic iteration - count all items
+    printf("\nTest 20: ForEach - basic iteration\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+    g_foreach_sum = 0;
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+
+    result = staticQueueForEach(&queue, countCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach failed: %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 4) {
+        printf("Expected to iterate 4 items, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    if (g_foreach_sum != 100) {
+        printf("Expected sum 100, got %i\n", g_foreach_sum);
+        return 1;
+    }
+
+    printf("Test 20 passed: ForEach iterated all items correctly\n");
+
+    // Test 21: ForEach on empty queue
+    printf("\nTest 21: ForEach on empty queue\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+
+    result = staticQueueForEach(&queue, countCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach on empty queue failed: %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 0) {
+        printf("Expected 0 iterations on empty queue, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    printf("Test 21 passed: ForEach handles empty queue\n");
+
+    // Test 22: ForEach with STOP
+    printf("\nTest 22: ForEach with STOP\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+
+    result = staticQueueForEach(&queue, stopCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach stop failed: %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 2) {
+        printf("Expected to stop after 2 items, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    printf("Test 22 passed: ForEach stops correctly\n");
+
+    // Test 23: ForEach with ERASE
+    printf("\nTest 23: ForEach with ERASE\n");
+    queueClear(&queue);
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 30);
+    queuePut(&queue, 20);
+    queuePut(&queue, 40);
+
+    result = staticQueueForEach(&queue, eraseCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach erase failed: %i\n", result);
+        return 1;
+    }
+
+    // Should only have 10 and 20 left
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 10) {
+        printf("Expected 10, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 20) {
+        printf("Expected 20, got %u\n", data);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty after erasing 30 and 40\n");
+        return 1;
+    }
+
+    printf("Test 23 passed: ForEach erases items correctly\n");
+
+    // Test 24: ForEach erase all items
+    printf("\nTest 24: ForEach erase all items\n");
+    queueClear(&queue);
+
+    queuePut(&queue, 100);
+    queuePut(&queue, 200);
+    queuePut(&queue, 300);
+
+    result = staticQueueForEach(&queue, eraseAllCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach erase all failed: %i\n", result);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty after erasing all\n");
+        return 1;
+    }
+
+    printf("Test 24 passed: ForEach can erase all items\n");
+
+    // Test 25: ForEach with single item
+    printf("\nTest 25: ForEach with single item\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+
+    queuePut(&queue, 999);
+
+    result = staticQueueForEach(&queue, countCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach single item failed: %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 1) {
+        printf("Expected 1 iteration, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    printf("Test 25 passed: ForEach handles single item\n");
+
+    // Test 26: ForEach after pop operations
+    printf("\nTest 26: ForEach after pop operations\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+
+    // Pop first two items
+    queuePop(&queue, &data);
+    queuePop(&queue, &data);
+
+    result = staticQueueForEach(&queue, countCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach after pop failed: %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 2) {
+        printf("Expected 2 items after popping 2, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    printf("Test 26 passed: ForEach works after pop operations\n");
+
+    // Test 27: ForEach selective erase
+    printf("\nTest 27: ForEach selective erase (even numbers)\n");
+    queueClear(&queue);
+
+    queuePut(&queue, 1);
+    queuePut(&queue, 2);
+    queuePut(&queue, 3);
+    queuePut(&queue, 4);
+
+    result = staticQueueForEach(&queue, eraseEvenCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach selective erase failed: %i\n", result);
+        return 1;
+    }
+
+    // Should have 1 and 3 left
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 1) {
+        printf("Expected 1, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 3) {
+        printf("Expected 3, got %u\n", data);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+
+    printf("Test 27 passed: ForEach selectively erases items\n");
+
+    // Test 28: ForEach with NULL callback
+    printf("\nTest 28: ForEach with NULL callback (error handling)\n");
+    queueClear(&queue);
+    queuePut(&queue, 10);
+
+    result = staticQueueForEach(&queue, NULL);
+    if (result != STATIC_QUEUE_EMPTY) {
+        printf("Expected error with NULL callback, got %i\n", result);
+        return 1;
+    }
+
+    printf("Test 28 passed: ForEach handles NULL callback\n");
+
+    // Test 29: ForEach callback returning error
+    printf("\nTest 29: ForEach callback returning error\n");
+    queueClear(&queue);
+    g_foreach_counter = 0;
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+
+    result = staticQueueForEach(&queue, errorCallback);
+    if (result != -999) {
+        printf("Expected callback error -999, got %i\n", result);
+        return 1;
+    }
+
+    if (g_foreach_counter != 3) {
+        printf("Expected to process 3 items before error, got %i\n", g_foreach_counter);
+        return 1;
+    }
+
+    printf("Test 29 passed: ForEach propagates callback errors\n");
+
+    // Test 30: Erase single item in a queue with one item
+    printf("\nTest 30: ForEach erase single item from single-item queue\n");
+    queueClear(&queue);
+    queuePut(&queue, 999);
+
+    result = staticQueueForEach(&queue, eraseAllCallback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach failed: %i\n", result);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty after erasing single item\n");
+        return 1;
+    }
+
+    printf("Test 30 passed: Single item erased from single-item queue\n");
+
+    // Test 31: Erase ONE element in middle, keep the rest
+    printf("\nTest 31: ForEach erase only middle element, keep others\n");
+    queueClear(&queue);
+
+    queuePut(&queue, 10);
+    queuePut(&queue, 20);
+    queuePut(&queue, 30);
+    queuePut(&queue, 40);
+
+    result = staticQueueForEach(&queue, eraseOnly20Callback);
+    if (result != STATIC_QUEUE_SUCCESS) {
+        printf("ForEach failed: %i\n", result);
+        return 1;
+    }
+
+    // Should have 10, 30, 40 left (not 20)
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 10) {
+        printf("Expected 10, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 30) {
+        printf("Expected 30, got %u\n", data);
+        return 1;
+    }
+
+    result = queuePop(&queue, &data);
+    if (result != STATIC_QUEUE_SUCCESS || data != 40) {
+        printf("Expected 40, got %u\n", data);
+        return 1;
+    }
+
+    if (!staticQueueEmpty(&queue)) {
+        printf("Queue should be empty\n");
+        return 1;
+    }
+
+    printf("Test 31 passed: Only one middle element erased, others kept\n");
+
+    printf("\n=== All staticQueueForEach tests passed ===\n");
 
     // Connect first driver and app
     printf("\nTest Done\n");
