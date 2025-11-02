@@ -79,10 +79,17 @@
 
 // Package queue
 typedef enum {
-    STATIC_QUEUE_SUCCESS = 0,
-    STATIC_QUEUE_FULL    = -401,
-    STATIC_QUEUE_EMPTY   = -402,
+    STATIC_QUEUE_SUCCESS      = 0,
+    STATIC_QUEUE_FULL         = -401,
+    STATIC_QUEUE_EMPTY        = -402,
+    STATIC_QUEUE_NOT_IN_QUEUE = -403,
 } queueErr_t;
+
+typedef enum {
+    STATIC_QUEUE_CB_NEXT  = 0, // Keep iterating
+    STATIC_QUEUE_CB_STOP,      // Stop iterating
+    STATIC_QUEUE_CB_ERASE,     // Erase this node and keep iterating
+} staticQueueCbDo_t;
 
 typedef struct staticQueueItem staticQueueItem_t;
 
@@ -172,6 +179,21 @@ bool staticQueuefull(staticQueue_t* queue);
  * Returns: true if empty
  */
 bool staticQueueEmpty(staticQueue_t* queue);
+
+/**
+ * Get the number of active items in the queue
+ * Input: Queue instance
+ * Returns: Number of items in queue, or negative error code
+ */
+int32_t staticQueueGetNumItems(staticQueue_t* queue);
+
+/**
+ * Loop through all items in queue and call the callback on each
+ * Input: Queue instance
+ * Input: Callback function
+ * Returns: queueErr_t
+ */
+int32_t staticQueueForEach(staticQueue_t* queue, int32_t (*callback)(staticQueue_t *queue, staticQueueItem_t *item));
 
 /**
  * This is a macro that makes it more safe to initialize a queue
