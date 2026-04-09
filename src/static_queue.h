@@ -83,6 +83,7 @@ typedef enum {
     STATIC_QUEUE_FULL         = -401,
     STATIC_QUEUE_EMPTY        = -402,
     STATIC_QUEUE_NOT_IN_QUEUE = -403,
+    STATIC_QUEUE_INVALID      = -404,
 } queueErr_t;
 
 typedef enum {
