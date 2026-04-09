@@ -33,6 +33,10 @@ int32_t staticQueueInit(staticQueue_t*     queue,
                         uint32_t           node_size,
                         staticQueueItem_t* first_item)
 {
+    if (queue_size == 0) {
+        return STATIC_QUEUE_INVALID;
+    }
+
     queue->head         = first_item;
     queue->tail         = first_item;
     queue->first_item   = first_item;
@@ -40,11 +44,13 @@ int32_t staticQueueInit(staticQueue_t*     queue,
 
     staticQueueItem_t* item = first_item;
     for (uint32_t i = 0; i < queue_size - 1; i++) {
+        item->active     = false;
         item->next       = (staticQueueItem_t*)((uint8_t*)item + node_size);
         item->next->last = item;
         item             = item->next;
     }
 
+    item->active     = false;
     first_item->last = item;
     item->next       = first_item;
 
